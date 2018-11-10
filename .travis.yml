@@ -4,12 +4,9 @@ os:
   - osx
   - linux
 compiler:
-  - clang
   - gcc
 env:
   - MPI_IMPL=mpich_shm
-  - MPI_IMPL=mpich_odd
-  - MPI_IMPL=openmpi
 before_install:
   - export TRAVIS_ROOT=$HOME/travis
   - mkdir -p $TRAVIS_ROOT

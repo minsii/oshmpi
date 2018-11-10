@@ -20,6 +20,7 @@ esac
 
 # this is where updated Autotools will be for Linux
 export PATH=$TRAVIS_ROOT/bin:$PATH
+ls $TRAVIS_ROOT/bin
 
 # Capture details of build
 case "$MPI_IMPL" in
