@@ -18,6 +18,9 @@ case "$os" in
        ;;
 esac
 
+# this is where updated Autotools will be for Linux
+export PATH=$TRAVIS_ROOT/bin:$PATH
+
 # Capture details of build
 case "$MPI_IMPL" in
     mpich_shm|mpich_odd)
@@ -62,7 +65,7 @@ TEST_MPIEXEC=
 case "$MPI_IMPL" in
     mpich_shm)
         TEST_MPIEXEC="mpiexec -np"
-        ;;
+      ;;
     mpich_odd)
         TEST_MPIEXEC="mpiexec -np"
         MPICH_ODD_EVEN_CLIQUES=1
@@ -80,6 +83,7 @@ NP=2
 # Run unit tests
 export MPIR_CVAR_ODD_EVEN_CLIQUES=$MPICH_ODD_EVEN_CLIQUES
 export OSHMPI_VERBOSE=1
+export SHMEM_SYMMETRIC_SIZE=33554432 #32MB
 echo "Run sos tests with MPIR_CVAR_ODD_EVEN_CLIQUES=$MPIR_CVAR_ODD_EVEN_CLIQUES, NP=$NP"
 $TEST_MPIEXEC $NP $SOS_IMPL/bin/shmem_latency_put_perf
 make check TEST_RUNNER="$TEST_MPIEXEC $NP"
