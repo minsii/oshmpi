@@ -23,4 +23,7 @@ void *shmemx_space_malloc(shmemx_space_t space, size_t size);
 void *shmemx_space_calloc(shmemx_space_t space, size_t count, size_t size);
 void *shmemx_space_align(shmemx_space_t space, size_t alignment, size_t size);
 
+void shmemx_print_timer(void);
+void shmemx_timer_reset(void);
+
 #endif /* OSHMPI_SHMEMX_H */
