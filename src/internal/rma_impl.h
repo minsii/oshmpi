@@ -79,6 +79,12 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_put(shmem_ctx_t ctx OSHMPI_ATTRIBUTE
     ctx_local_complete_impl(ctx, pe, win);
 }
 
+OSHMPI_TIMER_EXTERN_DECL(iput_dtype_create);
+OSHMPI_TIMER_EXTERN_DECL(iput_put_nbi);
+OSHMPI_TIMER_EXTERN_DECL(iput_local_comp);
+OSHMPI_TIMER_EXTERN_DECL(iput_dtype_free);
+OSHMPI_TIMER_EXTERN_DECL(iput);
+
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_iput(shmem_ctx_t ctx OSHMPI_ATTRIBUTE((unused)),
                                                  MPI_Datatype mpi_type, const void *origin_addr,
                                                  void *target_addr, ptrdiff_t target_st,
@@ -88,9 +94,16 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_iput(shmem_ctx_t ctx OSHMPI_ATTRIBUT
     MPI_Datatype origin_type = MPI_DATATYPE_NULL, target_type = MPI_DATATYPE_NULL;
     size_t origin_count = 0, target_count = 0;
 
+    OSHMPI_TIMER_LOCAL_DECL(iput_dtype_create);
+    OSHMPI_TIMER_LOCAL_DECL(iput_put_nbi);
+    OSHMPI_TIMER_LOCAL_DECL(iput_local_comp);
+    OSHMPI_TIMER_LOCAL_DECL(iput_dtype_free);
+    OSHMPI_TIMER_LOCAL_DECL(iput);
+
     if (nelems == 0)
         return;
-
+    OSHMPI_TIMER_START(iput);
+    OSHMPI_TIMER_START(iput_dtype_create);
     OSHMPI_create_strided_dtype(nelems, origin_st, mpi_type, -1 /* no required extent */ ,
                                 &origin_count, &origin_type);
     if (origin_st == target_st) {
@@ -99,14 +112,23 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_iput(shmem_ctx_t ctx OSHMPI_ATTRIBUT
     } else
         OSHMPI_create_strided_dtype(nelems, target_st, mpi_type, -1 /* no required extent */ ,
                                     &target_count, &target_type);
+    OSHMPI_TIMER_END(iput_dtype_create);
 
+    OSHMPI_TIMER_START(iput_put_nbi);
     ctx_put_nbi_impl(ctx, origin_type, target_type, origin_addr, target_addr,
                      origin_count, target_count, pe, &win);
+    OSHMPI_TIMER_END(iput_put_nbi);
+    OSHMPI_TIMER_START(iput_local_comp);
     ctx_local_complete_impl(ctx, pe, win);
+    OSHMPI_TIMER_END(iput_local_comp);
 
+    OSHMPI_TIMER_START(iput_dtype_free);
     OSHMPI_free_strided_dtype(mpi_type, &origin_type);
     if (origin_st != target_st)
         OSHMPI_free_strided_dtype(mpi_type, &target_type);
+    OSHMPI_TIMER_END(iput_dtype_free);
+
+    OSHMPI_TIMER_END(iput);
 }
 
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_get_nbi(shmem_ctx_t ctx OSHMPI_ATTRIBUTE((unused)),

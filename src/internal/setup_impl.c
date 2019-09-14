@@ -45,6 +45,13 @@ typedef struct OSHMPI_mpi_info_args {
 OSHMPI_global_t OSHMPI_global = { 0 };
 OSHMPI_env_t OSHMPI_env = { 0 };
 
+OSHMPI_TIMER_DECL(iput_dtype_create);
+OSHMPI_TIMER_DECL(iput_put_nbi);
+OSHMPI_TIMER_DECL(iput_local_comp);
+OSHMPI_TIMER_DECL(iput_dtype_free);
+OSHMPI_TIMER_DECL(iput);
+OSHMPI_TIMER_DECL(quiet);
+
 OSHMPI_STATIC_INLINE_PREFIX void initialize_symm_text(OSHMPI_mpi_info_args_t info_args)
 {
     MPI_Info info = MPI_INFO_NULL;
