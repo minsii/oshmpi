@@ -450,7 +450,7 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
 }
 
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_disp_to_vaddr(OSHMPI_symm_obj_type_t symm_type,
-                                                                int disp, void **vaddr)
+                                                                MPI_Aint disp, void **vaddr)
 {
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
     *vaddr = (void *) disp;     /* Original computes the remote vaddr */
