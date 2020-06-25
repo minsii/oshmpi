@@ -213,6 +213,14 @@ typedef enum {
     OSHMPI_AMO_MPI_OP_MAX,
 } OSHMPI_amo_mpi_op_index_t;
 
+#ifdef OSHMPI_ENABLE_IPO /* define empty bracket to be compatible with code cleanup script */
+#define OSHMPI_FORCEINLINE() _Pragma("forceinline")
+#define OSHMPI_NOINLINE_RECURSIVE() _Pragma("noinline recursive")
+#else
+#define OSHMPI_FORCEINLINE() ;
+#define OSHMPI_NOINLINE_RECURSIVE() ;
+#endif
+
 extern OSHMPI_global_t OSHMPI_global;
 extern OSHMPI_env_t OSHMPI_env;
 
@@ -550,7 +558,7 @@ OSHMPI_STATIC_INLINE_PREFIX void ctx_local_complete_impl(shmem_ctx_t ctx
                                                          OSHMPI_ATTRIBUTE((unused)), int pe,
                                                          MPI_Win win)
 {
-#pragma forceinline
+OSHMPI_FORCEINLINE()
     OSHMPI_CALLMPI(MPI_Win_flush_local(pe, win));
 }
 
