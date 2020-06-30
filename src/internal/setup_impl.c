@@ -54,7 +54,7 @@ static void initialize_symm_win(OSHMPI_mpi_info_args_t info_args)
     OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", (const char *) info_args.accumulate_ops));
     OSHMPI_CALLMPI(MPI_Info_set
                    (info, "which_accumulate_ops", (const char *) info_args.which_accumulate_ops));
-    OSHMPI_CALLMPI(MPI_Info_set(info, "symmetric_attach", "true"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "symm_attach", "true"));
 
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Win_create_dynamic(info, OSHMPI_global.comm_world, &OSHMPI_global.symm_win));
