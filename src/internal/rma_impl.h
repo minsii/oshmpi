@@ -23,9 +23,15 @@ OSHMPI_STATIC_INLINE_PREFIX void ctx_put_nbi_impl(shmem_ctx_t ctx OSHMPI_ATTRIBU
 
     /* TODO: check non-int inputs exceeds int limit */
 
+#ifdef OSHMPI_ENABLE_PUT_ABS
+    OSHMPI_FORCEINLINE()
+        OSHMPI_CALLMPI(MPIX_Put_abs(origin_addr, (int) origin_count, origin_type, pe,
+                                    target_disp, (int) target_count, target_type, win));
+#else
     OSHMPI_FORCEINLINE()
         OSHMPI_CALLMPI(MPI_Put(origin_addr, (int) origin_count, origin_type, pe,
                                target_disp, (int) target_count, target_type, win));
+#endif
     OSHMPI_SET_OUTSTANDING_OP(win, OSHMPI_OP_OUTSTANDING);      /* PUT is always outstanding */
 
     /* return window object if the caller requires */

@@ -138,6 +138,7 @@ static void initialize_symm_text(OSHMPI_mpi_info_args_t info_args)
 
     OSHMPI_global.symm_data_base = OSHMPI_DATA_START;
     OSHMPI_global.symm_data_size = (MPI_Aint) OSHMPI_DATA_SIZE;
+    OSHMPI_global.symm_data_base_end = (MPI_Aint) OSHMPI_DATA_START + (MPI_Aint) OSHMPI_DATA_SIZE;
     OSHMPI_global.symm_data_outstanding_op = 0;
 
     if (OSHMPI_global.symm_data_base == NULL || OSHMPI_global.symm_data_size == 0)
@@ -189,6 +190,8 @@ static void initialize_symm_heap(OSHMPI_mpi_info_args_t info_args)
                                     OSHMPI_global.comm_world, &OSHMPI_global.symm_heap_base,
                                     &OSHMPI_global.symm_heap_win));
     OSHMPI_ASSERT(OSHMPI_global.symm_heap_base != NULL);
+    OSHMPI_global.symm_heap_base_end =
+        (MPI_Aint) OSHMPI_global.symm_heap_base + OSHMPI_global.symm_heap_true_size;
 
     /* Initialize MSPACE */
     OSHMPI_global.symm_heap_mspace = create_mspace_with_base(OSHMPI_global.symm_heap_base,
