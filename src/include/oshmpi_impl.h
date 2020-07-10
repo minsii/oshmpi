@@ -98,12 +98,14 @@ typedef struct {
 #endif
 
     void *symm_heap_base;
+    MPI_Aint symm_heap_base_end;
     MPI_Aint symm_heap_size;
     MPI_Aint symm_heap_true_size;
     mspace symm_heap_mspace;
     OSHMPIU_thread_cs_t symm_heap_mspace_cs;
     void *symm_data_base;
     MPI_Aint symm_data_size;
+    MPI_Aint symm_data_base_end;
 
     OSHMPI_comm_cache_list_t comm_cache_list;
     OSHMPIU_thread_cs_t comm_cache_list_cs;
@@ -441,6 +443,19 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
             OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
         } else
             *disp_ptr = disp + OSHMPI_global.symm_data_bases[target_rank];
+    }
+#elif defined(OSHMPI_ENABLE_PUT_ABS)
+    *disp_ptr = (MPI_Aint) abs_addr;
+    if (*disp_ptr > (MPI_Aint) OSHMPI_global.symm_heap_base &&
+        *disp_ptr < OSHMPI_global.symm_heap_base_end) {
+        /* heap */
+        *win_ptr = OSHMPI_global.symm_heap_win;
+        return;
+    }
+    if (*disp_ptr > (MPI_Aint) OSHMPI_global.symm_data_base &&
+        *disp_ptr < OSHMPI_global.symm_data_base_end) {
+        /* text */
+        *win_ptr = OSHMPI_global.symm_data_win;
     }
 #else
     disp = (MPI_Aint) abs_addr - (MPI_Aint) OSHMPI_global.symm_heap_base;
