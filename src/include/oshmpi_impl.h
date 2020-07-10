@@ -215,7 +215,7 @@ typedef enum {
     OSHMPI_AMO_MPI_OP_MAX,
 } OSHMPI_amo_mpi_op_index_t;
 
-#ifdef OSHMPI_ENABLE_IPO /* define empty bracket to be compatible with code cleanup script */
+#ifdef OSHMPI_ENABLE_IPO        /* define empty bracket to be compatible with code cleanup script */
 #define OSHMPI_FORCEINLINE() _Pragma("forceinline")
 #define OSHMPI_NOINLINE_RECURSIVE() _Pragma("noinline recursive")
 #else
@@ -420,7 +420,7 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
      * - skip remote vaddr translation */
     if (OSHMPI_global.symm_base_flag || OSHMPI_global.world_rank == target_rank) {
         OSHMPI_FORCEINLINE()
-        OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
+            OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
         return;
     }
 
@@ -429,7 +429,7 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
         /* heap */
         if (OSHMPI_global.symm_heap_flag) {
             OSHMPI_FORCEINLINE()
-            OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
+                OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
         } else
             *disp_ptr = disp + OSHMPI_global.symm_heap_bases[target_rank];
         return;
@@ -440,7 +440,7 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
         /* text */
         if (OSHMPI_global.symm_data_flag) {
             OSHMPI_FORCEINLINE()
-            OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
+                OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
         } else
             *disp_ptr = disp + OSHMPI_global.symm_data_bases[target_rank];
     }
@@ -576,8 +576,8 @@ OSHMPI_STATIC_INLINE_PREFIX void ctx_local_complete_impl(shmem_ctx_t ctx
                                                          OSHMPI_ATTRIBUTE((unused)), int pe,
                                                          MPI_Win win)
 {
-OSHMPI_FORCEINLINE()
-    OSHMPI_CALLMPI(MPI_Win_flush_local(pe, win));
+    OSHMPI_FORCEINLINE()
+        OSHMPI_CALLMPI(MPI_Win_flush_local(pe, win));
 }
 
 
