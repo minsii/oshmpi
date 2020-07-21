@@ -34,16 +34,82 @@ extern edata;
 #define OSHMPI_DATA_SIZE 0
 #endif
 
-typedef struct OSHMPI_mpi_info_args {
-    char accumulate_ops[MPI_MAX_INFO_VAL];
-    char which_accumulate_ops[MPI_MAX_INFO_VAL];        /* MPICH specific */
-} OSHMPI_mpi_info_args_t;
-
 OSHMPI_global_t OSHMPI_global = { 0 };
 OSHMPI_env_t OSHMPI_env = { 0 };
 
+static void set_mpi_info_args(MPI_Info info)
+{
+    int c = 0;
+    size_t maxlen;
+    unsigned int nops;
+
+    char accumulate_ops[MPI_MAX_INFO_VAL];
+    char which_accumulate_ops[MPI_MAX_INFO_VAL];        /* MPICH specific */
+    char which_rma_ops[MPI_MAX_INFO_VAL];       /* MPICH specific */
+
+    /* which_accumulate_ops.
+     * It is MPICH specific, valid values include:
+     * max,min,sum,prod,maxloc,minloc,band,bor,bxor,land,lor,lxor,replace,no_op,cswap */
+
+    OSHMPI_ASSERT(MPI_MAX_INFO_VAL >= strlen("cswap,sum,band,bor,bxor,no_op,replace") + 1);
+
+    maxlen = MPI_MAX_INFO_VAL;
+    nops = 0;
+    if (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_CSWAP)) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "cswap");
+        nops++;
+    }
+    if ((OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FINC)) || (OSHMPI_env.amo_ops) ||
+        (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FADD)) ||
+        (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_ADD))) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%ssum", (c > 0) ? "," : "");
+        nops++;
+    }
+    if (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FETCH)) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%sno_op", (c > 0) ? "," : "");
+        nops++;
+    }
+    if ((OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_SET)) ||
+        (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_SWAP))) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%sreplace", (c > 0) ? "," : "");
+        nops++;
+    }
+    if ((OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FAND)) ||
+        (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_AND))) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%sband", (c > 0) ? "," : "");
+        nops++;
+    }
+    if ((OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FOR)) || (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_OR))) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%sbor", (c > 0) ? "," : "");
+        nops++;
+    }
+    if ((OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FXOR)) ||
+        (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_XOR))) {
+        c += snprintf(which_accumulate_ops + c, maxlen - c, "%sbxor", (c > 0) ? "," : "");
+        nops++;
+    }
+
+    if (c == 0)
+        strncpy(which_accumulate_ops, "none", maxlen);
+
+    OSHMPI_CALLMPI(MPI_Info_set(info, "which_accumulate_ops", (const char *) which_accumulate_ops));
+
+    /* accumulate_ops.
+     * With MPI standard info values same_op or same_op_no_op,
+     * we can enable MPI accumulate based atomics. MPI-3 is required at configure. */
+    maxlen = MPI_MAX_INFO_VAL;  /* reset */
+    if (nops == 1) {
+        OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op"));
+        OSHMPI_global.amo_direct = 1;
+    } else if (nops == 2 && (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_FETCH))) {
+        OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op_no_op"));
+        OSHMPI_global.amo_direct = 1;
+    } else      /* MPI default */
+        OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op_no_op"));
+}
+
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
-static void initialize_symm_win(OSHMPI_mpi_info_args_t info_args)
+static void initialize_symm_win(void)
 {
     MPI_Info info = MPI_INFO_NULL;
     OSHMPI_global.symm_win = MPI_WIN_NULL;
@@ -51,9 +117,7 @@ static void initialize_symm_win(OSHMPI_mpi_info_args_t info_args)
     OSHMPI_global.symm_base_flag = 1;
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
-    OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", (const char *) info_args.accumulate_ops));
-    OSHMPI_CALLMPI(MPI_Info_set
-                   (info, "which_accumulate_ops", (const char *) info_args.which_accumulate_ops));
+    set_mpi_info_args(info);
     OSHMPI_CALLMPI(MPI_Info_set(info, "symm_attach", "true"));
 
     /* Allocate RMA window */
@@ -131,7 +195,7 @@ static void attach_symm_heap(void)
          OSHMPI_global.symm_heap_flag);
 }
 #else /* OSHMPI_ENABLE_DYNAMIC_WIN */
-static void initialize_symm_text(OSHMPI_mpi_info_args_t info_args)
+static void initialize_symm_text(void)
 {
     MPI_Info info = MPI_INFO_NULL;
     OSHMPI_global.symm_data_win = MPI_WIN_NULL;
@@ -146,9 +210,7 @@ static void initialize_symm_text(OSHMPI_mpi_info_args_t info_args)
                          OSHMPI_global.symm_data_base, OSHMPI_global.symm_data_size);
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
-    OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", (const char *) info_args.accumulate_ops));
-    OSHMPI_CALLMPI(MPI_Info_set
-                   (info, "which_accumulate_ops", (const char *) info_args.which_accumulate_ops));
+    set_mpi_info_args(info);
 
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Win_create
@@ -163,7 +225,7 @@ static void initialize_symm_text(OSHMPI_mpi_info_args_t info_args)
                   OSHMPI_global.symm_data_base, OSHMPI_global.symm_data_size);
 }
 
-static void initialize_symm_heap(OSHMPI_mpi_info_args_t info_args)
+static void initialize_symm_heap(void)
 {
     uint64_t symm_heap_size;
     MPI_Info info = MPI_INFO_NULL;
@@ -182,9 +244,7 @@ static void initialize_symm_heap(OSHMPI_mpi_info_args_t info_args)
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Info_create(&info));
     OSHMPI_CALLMPI(MPI_Info_set(info, "alloc_shm", "true"));    /* MPICH specific */
-    OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", (const char *) info_args.accumulate_ops));
-    OSHMPI_CALLMPI(MPI_Info_set
-                   (info, "which_accumulate_ops", (const char *) info_args.which_accumulate_ops));
+    set_mpi_info_args(info);
 
     OSHMPI_CALLMPI(MPI_Win_allocate((MPI_Aint) symm_heap_size, 1 /* disp_unit */ , info,
                                     OSHMPI_global.comm_world, &OSHMPI_global.symm_heap_base,
@@ -446,72 +506,10 @@ static void initialize_env(void)
 #endif
 }
 
-static void set_mpi_info_args(OSHMPI_mpi_info_args_t * info)
-{
-    int c = 0;
-    size_t maxlen = MPI_MAX_INFO_VAL;
-    unsigned int nops = 0;
-    uint32_t val = OSHMPI_env.amo_ops;
-
-    memset(info->accumulate_ops, 0, sizeof(info->accumulate_ops));
-    memset(info->which_accumulate_ops, 0, sizeof(info->which_accumulate_ops));
-
-    /* Info key which_accumulate_ops is MPICH specific, valid values include:
-     * max,min,sum,prod,maxloc,minloc,band,bor,bxor,land,lor,lxor,replace,no_op,cswap */
-
-    OSHMPI_ASSERT(MPI_MAX_INFO_VAL >= strlen("cswap,sum,band,bor,bxor,no_op,replace") + 1);
-
-    if (val & (1 << OSHMPI_AMO_CSWAP)) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "cswap");
-        nops++;
-    }
-    if ((val & (1 << OSHMPI_AMO_FINC)) || (val & (1 << OSHMPI_AMO_INC)) ||
-        (val & (1 << OSHMPI_AMO_FADD)) || (val & (1 << OSHMPI_AMO_ADD))) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%ssum", (c > 0) ? "," : "");
-        nops++;
-    }
-    if (val & (1 << OSHMPI_AMO_FETCH)) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%sno_op", (c > 0) ? "," : "");
-        nops++;
-    }
-    if ((val & (1 << OSHMPI_AMO_SET)) || (val & (1 << OSHMPI_AMO_SWAP))) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%sreplace", (c > 0) ? "," : "");
-        nops++;
-    }
-    if ((val & (1 << OSHMPI_AMO_FAND)) || (val & (1 << OSHMPI_AMO_AND))) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%sband", (c > 0) ? "," : "");
-        nops++;
-    }
-    if ((val & (1 << OSHMPI_AMO_FOR)) || (val & (1 << OSHMPI_AMO_OR))) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%sbor", (c > 0) ? "," : "");
-        nops++;
-    }
-    if ((val & (1 << OSHMPI_AMO_FXOR)) || (val & (1 << OSHMPI_AMO_XOR))) {
-        c += snprintf(info->which_accumulate_ops + c, maxlen - c, "%sbxor", (c > 0) ? "," : "");
-        nops++;
-    }
-
-    if (c == 0)
-        strncpy(info->which_accumulate_ops, "none", maxlen);
-
-    /* With MPI standard info values same_op or same_op_no_op,
-     * we can enable MPI accumulate based atomics. MPI-3 is required at configure. */
-    maxlen = MPI_MAX_INFO_VAL;  /* reset */
-    if (nops == 1) {
-        strncpy(info->accumulate_ops, "same_op", maxlen);
-        OSHMPI_global.amo_direct = 1;
-    } else if (nops == 2 && (val & (1 << OSHMPI_AMO_FETCH))) {
-        strncpy(info->accumulate_ops, "same_op_no_op", maxlen);
-        OSHMPI_global.amo_direct = 1;
-    } else      /* MPI default */
-        strncpy(info->accumulate_ops, "same_op_no_op", maxlen);
-}
-
 int OSHMPI_initialize_thread(int required, int *provided)
 {
     int mpi_errno = MPI_SUCCESS;
     int mpi_provided = 0, mpi_initialized = 0, mpi_required = 0;
-    OSHMPI_mpi_info_args_t info_args;
 
     if (OSHMPI_global.is_initialized)
         goto fn_exit;
@@ -566,19 +564,17 @@ int OSHMPI_initialize_thread(int required, int *provided)
 
     print_env();
 
-    set_mpi_info_args(&info_args);
-
     OSHMPI_global.page_sz = (size_t) sysconf(_SC_PAGESIZE);
     OSHMPIU_initialize_symm_mem(OSHMPI_global.comm_world);
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
-    initialize_symm_win(info_args);
+    initialize_symm_win();
     attach_symm_text();
     attach_symm_heap();
 #else
-    initialize_symm_text(info_args);
+    initialize_symm_text();
 
-    initialize_symm_heap(info_args);
+    initialize_symm_heap();
 #endif
 
     OSHMPI_coll_initialize();
