@@ -119,6 +119,10 @@ static void set_mpi_info_args(MPI_Info info)
         OSHMPI_global.amo_direct = 1;
     } else      /* MPI default */
         OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op_no_op"));
+
+    OSHMPI_CALLMPI(MPI_Info_set(info, "which_rma_ops", "put,get"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "rma_op_types:put", "basic:unlimited,vector:unlimited"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "rma_op_types:get", "basic:unlimited,vector:unlimited"));
 }
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
