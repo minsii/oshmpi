@@ -23,7 +23,7 @@ OSHMPI_STATIC_INLINE_PREFIX void ctx_put_nbi_impl(shmem_ctx_t ctx OSHMPI_ATTRIBU
 
     /* TODO: check non-int inputs exceeds int limit */
 
-#ifdef OSHMPI_ENABLE_PUT_ABS
+#ifdef OSHMPI_ENABLE_RMA_ABS
     OSHMPI_FORCEINLINE()
         OSHMPI_CALLMPI(MPIX_Put_abs(origin_addr, (int) origin_count, origin_type, pe,
                                     target_disp, (int) target_count, target_type, win));
@@ -53,10 +53,16 @@ OSHMPI_STATIC_INLINE_PREFIX void ctx_get_nbi_impl(shmem_ctx_t ctx OSHMPI_ATTRIBU
     OSHMPI_ASSERT(target_disp >= 0 && win != MPI_WIN_NULL);
 
     /* TODO: check non-int inputs exceeds int limit */
-
+#ifdef OSHMPI_ENABLE_RMA_ABS
+    OSHMPI_FORCEINLINE()
+        OSHMPI_CALLMPI(MPIX_Get_abs(origin_addr, (int) origin_count, origin_type, pe,
+                                    target_disp, (int) target_count, target_type, win));
+#else
     OSHMPI_FORCEINLINE()
         OSHMPI_CALLMPI(MPI_Get(origin_addr, (int) origin_count, origin_type, pe,
                                target_disp, (int) target_count, target_type, win));
+#endif
+
     OSHMPI_SET_OUTSTANDING_OP(win, completion); /* GET can be outstanding or completed */
 
     /* return window object if the caller requires */
