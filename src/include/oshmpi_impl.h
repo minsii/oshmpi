@@ -444,7 +444,7 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
         } else
             *disp_ptr = disp + OSHMPI_global.symm_data_bases[target_rank];
     }
-#elif defined(OSHMPI_ENABLE_PUT_ABS)
+#elif defined(OSHMPI_ENABLE_RMA_ABS)
     *disp_ptr = (MPI_Aint) abs_addr;
     if (*disp_ptr > (MPI_Aint) OSHMPI_global.symm_heap_base &&
         *disp_ptr < OSHMPI_global.symm_heap_base_end) {
