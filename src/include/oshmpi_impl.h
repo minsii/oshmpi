@@ -15,6 +15,7 @@
 #include <pthread.h>
 #endif
 #include <shmem.h>
+#include <shmemx.h>
 
 #include "dlmalloc.h"
 #include "oshmpi_util.h"
@@ -68,6 +69,25 @@ typedef struct OSHMPI_comm_cache_list {
     int nobjs;
 } OSHMPI_comm_cache_list_t;
 
+typedef struct OSHMPI_space {
+    void *heap_base;
+    size_t heap_sz;
+    OSUMPIU_mempool_t mem_pool;
+    OSHMPIU_thread_cs_t mem_pool_cs;
+    MPI_Win win;
+    struct OSHMPI_space *next;
+} OSHMPI_space_t;
+
+typedef struct OSHMPI_ctx {
+    MPI_Win win;
+} OSHMPI_ctx_t;
+
+typedef struct OSHMPI_space_list {
+    OSHMPI_space_t *head;
+    int nspaces;
+    OSHMPIU_thread_cs_t cs;
+} OSHMPI_space_list_t;
+
 struct OSHMPI_amo_pkt;
 
 typedef struct {
@@ -109,6 +129,8 @@ typedef struct {
 
     OSHMPI_comm_cache_list_t comm_cache_list;
     OSHMPIU_thread_cs_t comm_cache_list_cs;
+
+    OSHMPI_space_list_t space_list;
 
     /* Active message based AMO */
     MPI_Comm amo_comm_world;    /* duplicate of COMM_WORLD, used for packet */
@@ -231,11 +253,23 @@ int OSHMPI_initialize_thread(int required, int *provided);
 void OSHMPI_implicit_finalize(void);
 int OSHMPI_finalize(void);
 void OSHMPI_global_exit(int status);
+void OSHMPI_set_mpi_info_args(MPI_Info info);
 
 void *OSHMPI_malloc(size_t size);
 void OSHMPI_free(void *ptr);
 void *OSHMPI_realloc(void *ptr, size_t size);
 void *OSHMPI_align(size_t alignment, size_t size);
+
+void OSHMPI_space_initialize(void);
+void OSHMPI_space_finalize(void);
+void OSHMPI_space_create(shmemx_space_config_t space_config, OSHMPI_space_t ** space_ptr);
+void OSHMPI_space_destroy(OSHMPI_space_t * space);
+int OSHMPI_space_create_ctx(OSHMPI_space_t * space, long options, OSHMPI_ctx_t ** ctx);
+void OSHMPI_space_attach(OSHMPI_space_t * space);
+void OSHMPI_space_detach(OSHMPI_space_t * space);
+void *OSHMPI_space_malloc(OSHMPI_space_t * space, size_t size);
+void *OSHMPI_space_align(OSHMPI_space_t * space, size_t alignment, size_t size);
+void OSHMPI_space_free(OSHMPI_space_t * space, void *ptr);
 
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_put_nbi(shmem_ctx_t ctx OSHMPI_ATTRIBUTE((unused)),
                                                     MPI_Datatype mpi_type, const void *origin_addr,

@@ -37,14 +37,9 @@ extern edata;
 OSHMPI_global_t OSHMPI_global = { 0 };
 OSHMPI_env_t OSHMPI_env = { 0 };
 
-static void set_mpi_info_args(MPI_Info info)
+void OSHMPI_set_mpi_info_args(MPI_Info info)
 {
-    int c = 0;
-    size_t maxlen;
     unsigned int nops;
-
-    char accumulate_ops[MPI_MAX_INFO_VAL];
-    char which_rma_ops[MPI_MAX_INFO_VAL];       /* MPICH specific */
 
     const char *amo_std_types =
         "int:1,long:1,longlong:1,uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
@@ -58,7 +53,6 @@ static void set_mpi_info_args(MPI_Info info)
 
     OSHMPI_ASSERT(MPI_MAX_INFO_VAL >= strlen("cswap,sum,band,bor,bxor,no_op,replace") + 1);
 
-    maxlen = MPI_MAX_INFO_VAL;
     nops = 0;
     if (OSHMPI_env.amo_ops & (1 << OSHMPI_AMO_CSWAP)) {
         OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_op_types:cswap", amo_std_types));
@@ -97,7 +91,6 @@ static void set_mpi_info_args(MPI_Info info)
     /* accumulate_ops.
      * With MPI standard info values same_op or same_op_no_op,
      * we can enable MPI accumulate based atomics. MPI-3 is required at configure. */
-    maxlen = MPI_MAX_INFO_VAL;  /* reset */
     if (nops == 1) {
         OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op"));
         OSHMPI_global.amo_direct = 1;
@@ -121,7 +114,7 @@ static void initialize_symm_win(void)
     OSHMPI_global.symm_base_flag = 1;
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
-    set_mpi_info_args(info);
+    OSHMPI_set_mpi_info_args(info);
     OSHMPI_CALLMPI(MPI_Info_set(info, "symm_attach", "true"));
 
     /* Allocate RMA window */
@@ -214,7 +207,7 @@ static void initialize_symm_text(void)
                          OSHMPI_global.symm_data_base, OSHMPI_global.symm_data_size);
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
-    set_mpi_info_args(info);
+    OSHMPI_set_mpi_info_args(info);
 
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Win_create
@@ -248,7 +241,7 @@ static void initialize_symm_heap(void)
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Info_create(&info));
     OSHMPI_CALLMPI(MPI_Info_set(info, "alloc_shm", "true"));    /* MPICH specific */
-    set_mpi_info_args(info);
+    OSHMPI_set_mpi_info_args(info);
 
     OSHMPI_CALLMPI(MPI_Win_allocate((MPI_Aint) symm_heap_size, 1 /* disp_unit */ , info,
                                     OSHMPI_global.comm_world, &OSHMPI_global.symm_heap_base,
@@ -583,6 +576,7 @@ int OSHMPI_initialize_thread(int required, int *provided)
 
     OSHMPI_coll_initialize();
     OSHMPI_amo_initialize();
+    OSHMPI_space_initialize();
 
     OSHMPI_am_progress_mpi_barrier(OSHMPI_global.comm_world);
     OSHMPI_global.is_initialized = 1;
@@ -611,6 +605,7 @@ static int finalize_impl(void)
 
     OSHMPI_coll_finalize();
     OSHMPI_amo_finalize();
+    OSHMPI_space_finalize();
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
     if (OSHMPI_global.symm_win != MPI_WIN_NULL) {
