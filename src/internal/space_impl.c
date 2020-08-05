@@ -8,6 +8,22 @@
 #include <shmemx.h>
 #include "oshmpi_impl.h"
 
+static void space_ictx_create(void *base, MPI_Aint size, MPI_Info info, OSHMPI_ictx_t * ictx)
+{
+    OSHMPI_CALLMPI(MPI_Win_create(base, size, 1 /* disp_unit */ , info,
+                                  OSHMPI_global.comm_world, &ictx->win));
+    OSHMPI_CALLMPI(MPI_Win_lock_all(MPI_MODE_NOCHECK, ictx->win));
+    ictx->outstanding_op = 0;
+}
+
+static void space_ictx_destroy(OSHMPI_ictx_t * ictx)
+{
+    OSHMPI_ASSERT(ictx->win != MPI_WIN_NULL);
+    OSHMPI_CALLMPI(MPI_Win_unlock_all(ictx->win));
+    OSHMPI_CALLMPI(MPI_Win_free(&ictx->win));
+    ictx->win = MPI_WIN_NULL;
+}
+
 void OSHMPI_space_initialize(void)
 {
     OSHMPI_THREAD_INIT_CS(&OSHMPI_global.space_list.cs);
@@ -24,7 +40,8 @@ void OSHMPI_space_create(shmemx_space_config_t space_config, OSHMPI_space_t ** s
 {
     OSHMPI_space_t *space = OSHMPIU_malloc(sizeof(OSHMPI_space_t));
     OSHMPI_ASSERT(space);
-    space->win = MPI_WIN_NULL;
+    space->config = space_config;
+    OSHMPI_ASSERT(space->config.num_contexts >= 0);
 
     /* Allocate internal heap. Note that heap may be allocated on device.
      * Thus, we need allocate heap and the space object separately. */
@@ -40,6 +57,13 @@ void OSHMPI_space_create(shmemx_space_config_t space_config, OSHMPI_space_t ** s
     LL_PREPEND(OSHMPI_global.space_list.head, space);
     OSHMPI_global.space_list.nspaces++;
     OSHMPI_THREAD_EXIT_CS(&OSHMPI_global.space_list.cs);
+
+    space->ctx_list = NULL;
+    space->default_ictx.win = MPI_WIN_NULL;
+    space->default_ictx.outstanding_op = 0;
+
+    OSHMPI_DBGMSG("create space %p, base %p, size %ld, num_contexts=%d\n",
+                  space, space->heap_base, space->heap_sz, space->config.num_contexts);
 
     *space_ptr = (void *) space;
 }
@@ -64,15 +88,19 @@ void OSHMPI_space_destroy(OSHMPI_space_t * space)
 int OSHMPI_space_create_ctx(OSHMPI_space_t * space, long options, OSHMPI_ctx_t ** ctx_ptr)
 {
     int shmem_errno = SHMEM_SUCCESS;
+    int i;
 
-    if (space->win == MPI_WIN_NULL) {
-        /* Cannot create window before collective attach */
-        shmem_errno = SHMEM_NO_CTX;
-    } else {
-        OSHMPI_ctx_t *ctx = (OSHMPI_ctx_t *) OSHMPIU_malloc(sizeof(OSHMPI_ctx_t));
-        ctx->win = space->win;  /* window was created at collective attach */
-        *ctx_ptr = ctx;
+    /* Space should have already be attached or no context is required at config. */
+    OSHMPI_ASSERT(space->ctx_list || space->config.num_contexts == 0);
+
+    for (i = 0; i < space->config.num_contexts; i++) {
+        if (OSHMPI_ATOMIC_FLAG_CAS(space->ctx_list[i].used_flag, 0, 1) == 0) {
+            *ctx_ptr = &space->ctx_list[i];
+            break;
+        }
     }
+    if (i >= space->config.num_contexts)        /* no available context */
+        shmem_errno = SHMEM_NO_CTX;
 
     return shmem_errno;
 }
@@ -82,29 +110,59 @@ void OSHMPI_space_attach(OSHMPI_space_t * space)
 {
     MPI_Info info = MPI_INFO_NULL;
 
-    OSHMPI_ASSERT(space->win == MPI_WIN_NULL);  /* space should not be attached yet */
+    /* Space should not be attached yet */
+    OSHMPI_ASSERT(!space->ctx_list);
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
     OSHMPI_set_mpi_info_args(info);
 
-    OSHMPI_CALLMPI(MPI_Win_create(space->heap_base, (MPI_Aint) space->heap_sz,
-                                  1 /* disp_unit */ , info, OSHMPI_global.comm_world,
-                                  &space->win));
+    /* Create internal window */
+    space_ictx_create(space->heap_base, (MPI_Aint) space->heap_sz, info, &space->default_ictx);
+    OSHMPI_DBGMSG("space_attach space %p, default ctx: base %p, size %ld, win 0x%x\n",
+                  space, space->heap_base, space->heap_sz, space->default_ictx.win);
 
-    OSHMPI_CALLMPI(MPI_Win_lock_all(MPI_MODE_NOCHECK, space->win));
+    /* TODO: assume all processes have the same config */
+    /* Create explicit-context windows */
+    if (space->config.num_contexts > 0) {
+        space->ctx_list =
+            (OSHMPI_ctx_t *) OSHMPIU_malloc(sizeof(OSHMPI_ctx_t) * space->config.num_contexts);
+        int i;
+        for (i = 0; i < space->config.num_contexts; i++) {
+            space_ictx_create(space->heap_base, (MPI_Aint) space->heap_sz,
+                              info, &space->ctx_list[i].ictx);
+
+            /* copy into context to avoid pointer dereference in RMA/AMO path */
+            space->ctx_list[i].base = space->heap_base;
+            space->ctx_list[i].size = space->heap_sz;
+            OSHMPI_ATOMIC_FLAG_STORE(space->ctx_list[i].used_flag, 0);
+
+            OSHMPI_DBGMSG("attach space %p, ctx[%d]: base %p, size %ld, win 0x%x\n",
+                          space, i, space->ctx_list[i].base, space->ctx_list[i].size,
+                          space->ctx_list[i].ictx.win);
+        }
+    }
+
     OSHMPI_CALLMPI(MPI_Info_free(&info));
-
-    OSHMPI_DBGMSG("space_attach space %p, base %p, size %ld, win 0x%x\n",
-                  space, space->heap_base, space->heap_sz, space->win);
 }
 
 /* Collectively detach the space from the default team */
 void OSHMPI_space_detach(OSHMPI_space_t * space)
 {
-    OSHMPI_ASSERT(space->win != MPI_WIN_NULL);  /* space should be already attached  */
+    int i;
 
-    OSHMPI_CALLMPI(MPI_Win_unlock_all(space->win));
-    OSHMPI_CALLMPI(MPI_Win_free(&space->win));
+    /* Destroy internal window */
+    space_ictx_destroy(&space->default_ictx);
+
+    /* Space should have already be attached or no context is required at config */
+    OSHMPI_ASSERT((space->config.num_contexts == 0 || space->ctx_list));
+
+    /* Destroy explicit-context windows */
+    for (i = 0; i < space->config.num_contexts; i++) {
+        OSHMPI_ASSERT(OSHMPI_ATOMIC_FLAG_LOAD(space->ctx_list[i].used_flag) == 0);
+        space_ictx_destroy(&space->ctx_list[i].ictx);
+    }
+    OSHMPIU_free(space->ctx_list);
+    space->ctx_list = NULL;
 }
 
 /* Collectively allocate a buffer from the space */

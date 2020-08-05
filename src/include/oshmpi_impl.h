@@ -48,12 +48,25 @@
 typedef OPA_int_t OSHMPI_atomic_flag_t;
 #define OSHMPI_ATOMIC_FLAG_STORE(flag, val) OPA_store_int(&(flag), val)
 #define OSHMPI_ATOMIC_FLAG_LOAD(flag) OPA_load_int(&(flag))
+#define OSHMPI_ATOMIC_FLAG_CAS(flag, old, new) OPA_cas_int(&(flag), (old), (new))
+
+typedef OPA_int_t OSHMPI_atomic_cnt_t;
+#define OSHMPI_ATOMIC_CNT_STORE(cnt, val) OPA_store_int(&(cnt), val)
+#define OSHMPI_ATOMIC_CNT_LOAD(cnt) OPA_load_int(&(cnt))
+#define OSHMPI_ATOMIC_CNT_INCR(cnt) OPA_incr_int(&(cnt))
+#define OSHMPI_ATOMIC_CNT_DECR(cnt) OPA_decr_int(&(cnt))
 #else
 typedef unsigned int OSHMPI_atomic_flag_t;
-#define OSHMPI_ATOMIC_FLAG_STORE(flag, val) do {flag = val;} while (0)
+#define OSHMPI_ATOMIC_FLAG_STORE(flag, val) do {(flag) = (val);} while (0)
 #define OSHMPI_ATOMIC_FLAG_LOAD(flag) (flag)
-#endif
+#define OSHMPI_ATOMIC_FLAG_CAS(flag, old, new) OSHMPIU_single_thread_cas_int(&(flag), old, new)
 
+typedef unsigned int OSHMPI_atomic_cnt_t;
+#define OSHMPI_ATOMIC_CNT_STORE(cnt, val) do {(cnt) = (val);} while (0)
+#define OSHMPI_ATOMIC_CNT_LOAD(cnt) (cnt)
+#define OSHMPI_ATOMIC_CNT_INCR(cnt) do {(cnt)++;} while (0)
+#define OSHMPI_ATOMIC_CNT_DECR(cnt) do {(cnt)--;} while (0)
+#endif
 
 typedef struct OSHMPI_comm_cache_obj {
     int pe_start;
@@ -69,18 +82,29 @@ typedef struct OSHMPI_comm_cache_list {
     int nobjs;
 } OSHMPI_comm_cache_list_t;
 
+typedef struct OSHMPI_ictx {
+    MPI_Win win;
+    unsigned int outstanding_op;
+} OSHMPI_ictx_t;
+
+typedef struct OSHMPI_ctx {
+    void *base;
+    MPI_Aint size;
+    OSHMPI_ictx_t ictx;
+    OSHMPI_atomic_flag_t used_flag;
+} OSHMPI_ctx_t;
+
 typedef struct OSHMPI_space {
     void *heap_base;
     size_t heap_sz;
     OSUMPIU_mempool_t mem_pool;
     OSHMPIU_thread_cs_t mem_pool_cs;
-    MPI_Win win;
+    OSHMPI_ictx_t default_ictx;
+    OSHMPI_ctx_t *ctx_list;     /* contexts created for this space. */
+
+    shmemx_space_config_t config;
     struct OSHMPI_space *next;
 } OSHMPI_space_t;
-
-typedef struct OSHMPI_ctx {
-    MPI_Win win;
-} OSHMPI_ctx_t;
 
 typedef struct OSHMPI_space_list {
     OSHMPI_space_t *head;
@@ -102,8 +126,7 @@ typedef struct {
     MPI_Group comm_world_group;
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
-    MPI_Win symm_win;
-    int symm_outstanding_op;    /* flag: 1 or 0 */
+    OSHMPI_ictx_t symm_ictx;
     int symm_base_flag;         /* if both heap and data are symmetrically allocated. flag: 1 or 0 */
     int symm_heap_flag;         /* if heap is symmetrically allocated. flag: 1 or 0 */
     int symm_data_flag;         /* if data is symmetrically allocated. flag: 1 or 0 */
@@ -111,10 +134,8 @@ typedef struct {
     MPI_Aint *symm_heap_bases;
     MPI_Aint *symm_data_bases;
 #else
-    MPI_Win symm_heap_win;
-    MPI_Win symm_data_win;
-    int symm_heap_outstanding_op;       /* flag: 1 or 0 */
-    int symm_data_outstanding_op;       /* flag: 1 or 0 */
+    OSHMPI_ictx_t symm_heap_ictx;
+    OSHMPI_ictx_t symm_data_ictx;
 #endif
 
     void *symm_heap_base;
@@ -248,6 +269,46 @@ typedef enum {
 extern OSHMPI_global_t OSHMPI_global;
 extern OSHMPI_env_t OSHMPI_env;
 
+/* Per-object critical section MACROs. */
+#ifdef OSHMPI_ENABLE_THREAD_MULTIPLE
+#define OSHMPI_THREAD_INIT_CS(cs_ptr)  do {                   \
+    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {\
+        int __err = OSHMPIU_thread_cs_init(cs_ptr);           \
+        OSHMPI_ASSERT(!__err);                                \
+    }                                                         \
+} while (0)
+
+#define OSHMPI_THREAD_DESTROY_CS(cs_ptr)  do {                 \
+    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE && \
+            OSHMPIU_THREAD_CS_IS_INITIALIZED(cs_ptr)) {        \
+        int __err = OSHMPIU_thread_cs_destroy(cs_ptr);         \
+        OSHMPI_ASSERT(!__err);                                 \
+    }                                                          \
+} while (0)
+
+#define OSHMPI_THREAD_ENTER_CS(cs_ptr)  do {                          \
+    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {        \
+        int __err;                                                    \
+        __err = OSHMPIU_THREAD_CS_ENTER(cs_ptr);                      \
+        OSHMPI_ASSERT(!__err);                                        \
+    }                                                                 \
+} while (0)
+
+#define OSHMPI_THREAD_EXIT_CS(cs_ptr)  do {                     \
+    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {  \
+        int __err = 0;                                          \
+        __err = OSHMPIU_THREAD_CS_EXIT(cs_ptr);                 \
+        OSHMPI_ASSERT(!__err);                                  \
+    }                                                           \
+} while (0)
+
+#else /* OSHMPI_ENABLE_THREAD_MULTIPLE */
+#define OSHMPI_THREAD_INIT_CS(cs_ptr)
+#define OSHMPI_THREAD_DESTROY_CS(cs_ptr)
+#define OSHMPI_THREAD_ENTER_CS(cs_ptr)
+#define OSHMPI_THREAD_EXIT_CS(cs_ptr)
+#endif /* OSHMPI_ENABLE_THREAD_MULTIPLE */
+
 /* SHMEM internal routines. */
 int OSHMPI_initialize_thread(int required, int *provided);
 void OSHMPI_implicit_finalize(void);
@@ -264,12 +325,14 @@ void OSHMPI_space_initialize(void);
 void OSHMPI_space_finalize(void);
 void OSHMPI_space_create(shmemx_space_config_t space_config, OSHMPI_space_t ** space_ptr);
 void OSHMPI_space_destroy(OSHMPI_space_t * space);
-int OSHMPI_space_create_ctx(OSHMPI_space_t * space, long options, OSHMPI_ctx_t ** ctx);
+int OSHMPI_space_create_ctx(OSHMPI_space_t * space, long options, OSHMPI_ctx_t ** ctx_ptr);
 void OSHMPI_space_attach(OSHMPI_space_t * space);
 void OSHMPI_space_detach(OSHMPI_space_t * space);
 void *OSHMPI_space_malloc(OSHMPI_space_t * space, size_t size);
 void *OSHMPI_space_align(OSHMPI_space_t * space, size_t alignment, size_t size);
 void OSHMPI_space_free(OSHMPI_space_t * space, void *ptr);
+
+void OSHMPI_ctx_destroy(OSHMPI_ctx_t * ctx);
 
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_ctx_put_nbi(shmem_ctx_t ctx OSHMPI_ATTRIBUTE((unused)),
                                                     MPI_Datatype mpi_type, const void *origin_addr,
@@ -439,15 +502,25 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_am_progress_mpi_allreduce(const void *se
                                                                   MPI_Op op, MPI_Comm comm);
 
 /* Common routines for internal use */
-OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_addr,
-                                                               int target_rank,
-                                                               MPI_Win * win_ptr,
-                                                               MPI_Aint * disp_ptr)
+OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_ictx_disp(OSHMPI_ctx_t * ctx,
+                                                            const void *abs_addr,
+                                                            int target_rank,
+                                                            MPI_Aint * disp_ptr,
+                                                            OSHMPI_ictx_t ** ictx_ptr)
 {
     MPI_Aint disp;
 
+    if (ctx != SHMEM_CTX_DEFAULT) {
+        *disp_ptr = (MPI_Aint) abs_addr - (MPI_Aint) ctx->base;
+        OSHMPI_ASSERT(*disp_ptr < ctx->size);
+        *ictx_ptr = &ctx->ictx;
+        return;
+    }
+
+    /* search default contexts */
+    *ictx_ptr = NULL;
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
-    *win_ptr = OSHMPI_global.symm_win;
+    *ictx_ptr = &OSHMPI_global.symm_ictx;
 
     /* fast path if both heap and data are symmetric or it is a local buffer
      * - skip heap or data check
@@ -477,26 +550,28 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
                 OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
         } else
             *disp_ptr = disp + OSHMPI_global.symm_data_bases[target_rank];
+        return;
     }
 #elif defined(OSHMPI_ENABLE_RMA_ABS)
     *disp_ptr = (MPI_Aint) abs_addr;
     if (*disp_ptr > (MPI_Aint) OSHMPI_global.symm_heap_base &&
         *disp_ptr < OSHMPI_global.symm_heap_base_end) {
         /* heap */
-        *win_ptr = OSHMPI_global.symm_heap_win;
+        *ictx_ptr = &OSHMPI_global.symm_heap_ictx;
         return;
     }
     if (*disp_ptr > (MPI_Aint) OSHMPI_global.symm_data_base &&
         *disp_ptr < OSHMPI_global.symm_data_base_end) {
         /* text */
-        *win_ptr = OSHMPI_global.symm_data_win;
+        *ictx_ptr = &OSHMPI_global.symm_data_ictx;
+        return;
     }
 #else
     disp = (MPI_Aint) abs_addr - (MPI_Aint) OSHMPI_global.symm_heap_base;
     if (disp > 0 && disp < OSHMPI_global.symm_heap_size) {
         /* heap */
         *disp_ptr = disp;
-        *win_ptr = OSHMPI_global.symm_heap_win;
+        *ictx_ptr = &OSHMPI_global.symm_heap_ictx;
         return;
     }
 
@@ -504,9 +579,24 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_win_and_disp(const void *abs_a
     if (disp > 0 && disp < OSHMPI_global.symm_data_size) {
         /* text */
         *disp_ptr = disp;
-        *win_ptr = OSHMPI_global.symm_data_win;
+        *ictx_ptr = &OSHMPI_global.symm_data_ictx;
+        return;
     }
 #endif
+
+    /* Search spaces */
+    OSHMPI_space_t *space, *tmp;
+    OSHMPI_THREAD_ENTER_CS(&OSHMPI_global.space_list.cs);
+    LL_FOREACH_SAFE(OSHMPI_global.space_list.head, space, tmp) {
+        disp = (MPI_Aint) abs_addr - (MPI_Aint) space->heap_base;
+        if (disp > 0 && disp < space->heap_sz) {
+            *disp_ptr = disp;
+            *ictx_ptr = &space->default_ictx;
+            /* TODO: support dynamic window version which attaches space at attach */
+            break;
+        }
+    }
+    OSHMPI_THREAD_EXIT_CS(&OSHMPI_global.space_list.cs);
 }
 
 OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_translate_disp_to_vaddr(OSHMPI_symm_obj_type_t symm_type,
@@ -566,52 +656,10 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_create_strided_dtype(size_t nelems, ptrd
     }
 }
 
-/* Per-object critical section MACROs. */
-#ifdef OSHMPI_ENABLE_THREAD_MULTIPLE
-#define OSHMPI_THREAD_INIT_CS(cs_ptr)  do {                   \
-    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {\
-        int __err = OSHMPIU_thread_cs_init(cs_ptr);           \
-        OSHMPI_ASSERT(!__err);                                \
-    }                                                         \
-} while (0)
-
-#define OSHMPI_THREAD_DESTROY_CS(cs_ptr)  do {                 \
-    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE && \
-            OSHMPIU_THREAD_CS_IS_INITIALIZED(cs_ptr)) {        \
-        int __err = OSHMPIU_thread_cs_destroy(cs_ptr);         \
-        OSHMPI_ASSERT(!__err);                                 \
-    }                                                          \
-} while (0)
-
-#define OSHMPI_THREAD_ENTER_CS(cs_ptr)  do {                          \
-    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {        \
-        int __err;                                                    \
-        __err = OSHMPIU_THREAD_CS_ENTER(cs_ptr);                      \
-        OSHMPI_ASSERT(!__err);                                        \
-    }                                                                 \
-} while (0)
-
-#define OSHMPI_THREAD_EXIT_CS(cs_ptr)  do {                     \
-    if (OSHMPI_global.thread_level == SHMEM_THREAD_MULTIPLE) {  \
-        int __err = 0;                                          \
-        __err = OSHMPIU_THREAD_CS_EXIT(cs_ptr);                 \
-        OSHMPI_ASSERT(!__err);                                  \
-    }                                                           \
-} while (0)
-
-#else /* OSHMPI_ENABLE_THREAD_MULTIPLE */
-#define OSHMPI_THREAD_INIT_CS(cs_ptr)
-#define OSHMPI_THREAD_DESTROY_CS(cs_ptr)
-#define OSHMPI_THREAD_ENTER_CS(cs_ptr)
-#define OSHMPI_THREAD_EXIT_CS(cs_ptr)
-#endif /* OSHMPI_ENABLE_THREAD_MULTIPLE */
-
-OSHMPI_STATIC_INLINE_PREFIX void ctx_local_complete_impl(shmem_ctx_t ctx
-                                                         OSHMPI_ATTRIBUTE((unused)), int pe,
-                                                         MPI_Win win)
+OSHMPI_STATIC_INLINE_PREFIX void ctx_local_complete_impl(int pe, OSHMPI_ictx_t * ictx)
 {
     OSHMPI_FORCEINLINE()
-        OSHMPI_CALLMPI(MPI_Win_flush_local(pe, win));
+        OSHMPI_CALLMPI(MPI_Win_flush_local(pe, ictx->win));
 }
 
 
@@ -642,22 +690,12 @@ enum {
 
 
 #ifdef OSHMPI_ENABLE_OP_TRACKING
-#ifdef OSHMPI_ENABLE_DYNAMIC_WIN
-#define OSHMPI_SET_OUTSTANDING_OP(win, completion) do {     \
-        if (completion == OSHMPI_OP_COMPLETED) break;       \
-        OSHMPI_global.symm_outstanding_op = 1; \
+#define OSHMPI_SET_OUTSTANDING_OP(ctx, completion) do {       \
+        if (completion == OSHMPI_OP_COMPLETED) break;         \
+        ctx->outstanding_op = 1;                              \
         } while (0)
 #else
-#define OSHMPI_SET_OUTSTANDING_OP(win, completion) do {     \
-        if (completion == OSHMPI_OP_COMPLETED) break;       \
-        if (win == OSHMPI_global.symm_heap_win)             \
-            OSHMPI_global.symm_heap_outstanding_op = 1;     \
-        else                                                \
-            OSHMPI_global.symm_data_outstanding_op = 1;     \
-        } while (0)
-#endif
-#else
-#define OSHMPI_SET_OUTSTANDING_OP(win, completion) do {} while (0)
+#define OSHMPI_SET_OUTSTANDING_OP(ctx, completion) do {} while (0)
 #endif
 
 OSHMPI_STATIC_INLINE_PREFIX size_t OSHMPI_get_mspace_sz(size_t bufsz)

@@ -11,6 +11,7 @@ typedef void *shmemx_space_t;
 
 typedef struct {
     size_t sheap_size;
+    int num_contexts;
 } shmemx_space_config_t;
 
 void shmemx_space_create(shmemx_space_config_t space_config, shmemx_space_t * space);
