@@ -16,6 +16,12 @@ check_PROGRAMS =  \
     space_int_put            \
     space_ctx_int_put
 
+if OSHMPI_ENABLE_CUDA_TEST
+check_PROGRAMS += space_cuda               \
+                  space_int_put_cuda       \
+                  space_ctx_int_put_cuda
+endif
+
 TESTS = $(check_PROGRAMS)
 
 MPIEXEC=mpiexec -n 2
@@ -35,6 +41,17 @@ threaded_init_funneled_CPPFLAGS  = -DSHMEM_REQUIRE_THREAD_FUNNELED $(AM_CPPFLAGS
 
 threaded_init_single_SOURCES = threaded_init.c
 threaded_init_single_CPPFLAGS  = -DSHMEM_REQUIRE_THREAD_SINGLE $(AM_CPPFLAGS)
+
+if OSHMPI_ENABLE_CUDA_TEST
+space_cuda_SOURCES = space.c
+space_cuda_CPPFLAGS  = -DUSE_CUDA $(AM_CPPFLAGS)
+
+space_int_put_cuda_SOURCES = space_int_put.c
+space_int_put_cuda_CPPFLAGS  = -DUSE_CUDA $(AM_CPPFLAGS)
+
+space_ctx_int_put_cuda_SOURCES = space_ctx_int_put.c
+space_ctx_int_put_cuda_CPPFLAGS  = -DUSE_CUDA $(AM_CPPFLAGS)
+endif
 
 .PHONY: checkprogs
 checkprogs: $(check_PROGRAMS)
