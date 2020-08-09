@@ -9,9 +9,15 @@
 
 typedef void *shmemx_space_t;
 
+typedef enum {
+    SHMEMX_SPACE_HOST,
+    SHMEMX_SPACE_CUDA           /* valid only when compile with --enable-cuda */
+} shmemx_space_memkind_t;
+
 typedef struct {
     size_t sheap_size;
     int num_contexts;
+    shmemx_space_memkind_t memkind;
 } shmemx_space_config_t;
 
 void shmemx_space_create(shmemx_space_config_t space_config, shmemx_space_t * space);

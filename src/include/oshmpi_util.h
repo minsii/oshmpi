@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
+#ifdef OSHMPI_ENABLE_CUDA
+#include <cuda_runtime_api.h>
+#endif
 
 /* ======================================================================
  * Generic Utility MACROs and inline functions.
@@ -108,6 +111,17 @@
             err = fnc_stmt;                \
             OSHMPI_ASSERT(err == 0);       \
         } while (0);
+
+#ifdef OSHMPI_ENABLE_CUDA
+/*  CUDA call wrapper.
+ *  No consistent error handling is defined in OpenSHMEM.
+ *  For now, we simply abort. */
+#define OSHMPI_CALLCUDA(fnc_stmt) do {            \
+            cudaError_t err = cudaSuccess;        \
+            err = fnc_stmt;                       \
+            OSHMPI_ASSERT(err == cudaSuccess);    \
+        } while (0)
+#endif
 
 OSHMPI_STATIC_INLINE_PREFIX void *OSHMPIU_malloc(size_t size)
 {
