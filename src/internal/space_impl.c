@@ -178,8 +178,9 @@ void OSHMPI_space_attach(OSHMPI_space_t * space)
 
     /* Create internal window */
     space_ictx_create(space->heap_base, (MPI_Aint) space->heap_sz, info, &space->default_ictx);
-    OSHMPI_DBGMSG("space_attach space %p, default ctx: base %p, size %ld, win 0x%x\n",
-                  space, space->heap_base, space->heap_sz, space->default_ictx.win);
+    OSHMPI_DBGMSG("space_attach space %p, default ctx: base %p, size %ld, win 0x%x, handle 0x%x\n",
+                  space, space->heap_base, space->heap_sz, space->default_ictx.win,
+                  space->sobj_handle);
 
     /* TODO: assume all processes have the same config */
     /* Create explicit-context windows */
