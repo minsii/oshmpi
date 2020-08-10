@@ -266,7 +266,7 @@ static void initialize_symm_heap(void)
                   OSHMPI_global.symm_heap_base, OSHMPI_global.symm_heap_size, symm_heap_size);
 }
 
-#endif /* end of OSHMPI_ENABLE_AMO_ASYNC_THREAD */
+#endif /* end of OSHMPI_ENABLE_AM_ASYNC_THREAD */
 
 static void set_env_amo_ops(const char *str, uint32_t * ops_ptr)
 {
@@ -410,9 +410,9 @@ static void print_env(void)
                       "auto\n"
 #endif
                       "    --enable-async-thread        "
-#ifdef OSHMPI_ENABLE_AMO_ASYNC_THREAD
+#ifdef OSHMPI_ENABLE_AM_ASYNC_THREAD
                       "yes\n"
-#elif defined(OSHMPI_RUNTIME_AMO_ASYNC_THREAD)
+#elif defined(OSHMPI_RUNTIME_AM_ASYNC_THREAD)
                       "runtime\n"
 #else
                       "no\n"
@@ -496,9 +496,9 @@ static void initialize_env(void)
     else
         set_env_amo_ops("any_op", &OSHMPI_env.amo_ops); /* default */
 
-#ifdef OSHMPI_ENABLE_AMO_ASYNC_THREAD
+#ifdef OSHMPI_ENABLE_AM_ASYNC_THREAD
     OSHMPI_env.enable_async_thread = 1;
-#elif defined(OSHMPI_RUNTIME_AMO_ASYNC_THREAD)
+#elif defined(OSHMPI_RUNTIME_AM_ASYNC_THREAD)
     OSHMPI_env.enable_async_thread = 0;
     val = getenv("OSHMPI_ENABLE_ASYNC_THREAD");
     if (val && strlen(val))
@@ -538,9 +538,9 @@ int OSHMPI_initialize_thread(int required, int *provided)
         mpi_required = required;
 
         /* Force thread multiple when async thread is enabled. */
-#ifdef OSHMPI_ENABLE_AMO_ASYNC_THREAD
+#ifdef OSHMPI_ENABLE_AM_ASYNC_THREAD
         mpi_required = MPI_THREAD_MULTIPLE;
-#elif defined(OSHMPI_RUNTIME_AMO_ASYNC_THREAD)
+#elif defined(OSHMPI_RUNTIME_AM_ASYNC_THREAD)
         if (OSHMPI_env.enable_async_thread)
             mpi_required = MPI_THREAD_MULTIPLE;
 #endif
@@ -582,7 +582,7 @@ int OSHMPI_initialize_thread(int required, int *provided)
 #endif
 
     OSHMPI_coll_initialize();
-    OSHMPI_amo_initialize();
+    OSHMPI_am_initialize();
     OSHMPI_space_initialize();
 
     OSHMPI_am_progress_mpi_barrier(OSHMPI_global.comm_world);
@@ -611,7 +611,7 @@ static int finalize_impl(void)
     OSHMPI_am_progress_mpi_barrier(OSHMPI_global.comm_world);
 
     OSHMPI_coll_finalize();
-    OSHMPI_amo_finalize();
+    OSHMPI_am_finalize();
     OSHMPI_space_finalize();
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
