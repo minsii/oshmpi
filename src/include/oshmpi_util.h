@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <mpi.h>
 #ifdef OSHMPI_ENABLE_CUDA
 #include <cuda_runtime_api.h>
@@ -242,7 +243,7 @@ OSHMPI_STATIC_INLINE_PREFIX OSHMPIU_gpu_pointer_type_t OSHMPIU_gpu_query_pointer
 #include "thread.h"
 
 #ifdef OSHMPI_ENABLE_CUDA
-#include "cuda.h"
+#include "gpu/cuda.h"
 #else
 OSHMPI_STATIC_INLINE_PREFIX OSHMPIU_gpu_pointer_type_t OSHMPIU_gpu_query_pointer_type(const void
                                                                                       *ptr)
