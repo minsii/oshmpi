@@ -120,7 +120,7 @@
 #define OSHMPI_CALLCUDA(fnc_stmt) do {            \
             cudaError_t err = cudaSuccess;        \
             err = fnc_stmt;                       \
-            OSHMPI_ASSERT(err == cudaSuccess);    \
+            if (err != cudaSuccess) OSHMPI_ERR_ABORT("cuda error:%d %s\n", err, cudaGetErrorString(err));    \
         } while (0)
 #endif
 

@@ -36,7 +36,8 @@ OSHMPI_STATIC_INLINE_PREFIX OSHMPIU_gpu_pointer_type_t OSHMPIU_gpu_query_pointer
     } else if (ret == cudaErrorInvalidValue) {
         type = OSHMPIU_GPU_POINTER_UNREGISTERED_HOST;
     } else
-        OSHMPI_ERR_ABORT("cudaPointerGetAttributes failed, ret %d\n", ret);
+        OSHMPI_ERR_ABORT("cudaPointerGetAttributes failed, ret %d: %s\n", ret,
+                         cudaGetErrorString(ret));
 
     return type;
 }
