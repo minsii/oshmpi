@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
     shmem_free(src);
 
     shmemx_space_detach(space);
+    shmemx_space_destroy(space);
     shmem_finalize();
 
     if (mype == 1 && errs == 0) {
