@@ -9,6 +9,7 @@ check_PROGRAMS =  \
     int_put       \
     int_put_heap  \
     int_amo       \
+    int_amo_heap  \
     threaded_init_multiple   \
     threaded_init_serialized \
     threaded_init_funneled   \
@@ -32,6 +33,9 @@ LOG_COMPILER=$(MPIEXEC)
 
 int_put_heap_SOURCES = int_put.c
 int_put_heap_CPPFLAGS  = -DUSE_SYMM_HEAP $(AM_CPPFLAGS)
+
+int_amo_heap_SOURCES = int_amo.c
+int_amo_heap_CPPFLAGS  = -DUSE_SYMM_HEAP $(AM_CPPFLAGS)
 
 threaded_init_multiple_SOURCES = threaded_init.c
 threaded_init_multiple_CPPFLAGS  = $(AM_CPPFLAGS)
