@@ -188,11 +188,10 @@ void OSHMPIU_check_symm_mem(void *local_addr, int *symm_flag_ptr, MPI_Aint ** of
 
     for (i = 0; i < symm_mem_global.world_size; i++) {
         /* check symmetric */
-        if (offsets[i] != myoffset) {
-            symm_flag = 0;
-            break;
-        }
-        offsets[i] -= myoffset;
+        symm_flag &= (offsets[i] == myoffset);
+        /* Used to compute target_disp for dynamic window or RMA_abs:
+         *  target_disp = addr(dest) + addr(remote_base) - addr(local_base) */
+        OSHMPI_CALLMPI(offsets[i] = MPI_Aint_diff(offsets[i], myoffset));
     }
 
     /* Store all addresses if it is non-symmetric */

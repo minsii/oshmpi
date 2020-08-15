@@ -608,8 +608,14 @@ OSHMPI_STATIC_INLINE_PREFIX void OSHMPI_sobj_trans_vaddr_to_disp(OSHMPI_sobj_att
         if (OSHMPI_SOBJ_HANDLE_CHECK_SYMMBIT(sobj_attr->handle)) {
             OSHMPI_FORCEINLINE()
                 OSHMPI_CALLMPI(MPI_Get_address(abs_addr, disp_ptr));
-        } else
-            *disp_ptr = (MPI_Aint) abs_addr + sobj_attr->base_offsets[target_rank];
+        } else {
+            MPI_Aint abs_disp = 0;
+            OSHMPI_FORCEINLINE()
+                OSHMPI_CALLMPI(MPI_Get_address(abs_addr, &abs_disp));
+            OSHMPI_FORCEINLINE()
+                OSHMPI_CALLMPI(*disp_ptr =
+                               MPI_Aint_add(abs_disp, sobj_attr->base_offsets[target_rank]));
+        }
     } else
 #endif
     {   /* If neither dynamic win nor rma_abs is enabled, we always use relative disp */
