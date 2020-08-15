@@ -115,7 +115,7 @@ static void initialize_symm_win(void)
 
     OSHMPI_CALLMPI(MPI_Info_create(&info));
     OSHMPI_set_mpi_info_args(info);
-    OSHMPI_CALLMPI(MPI_Info_set(info, "symm_attach", "true"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "coll_attach", "true"));
 
     /* Allocate RMA window */
     OSHMPI_CALLMPI(MPI_Win_create_dynamic
