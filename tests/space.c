@@ -9,15 +9,17 @@
 #include <shmem.h>
 #include <shmemx.h>
 
+#define NSPACES 10
+
 int main(int argc, char *argv[])
 {
-    int mype;
+    int mype, i;
 
     shmem_init();
     mype = shmem_my_pe();
 
     shmemx_space_config_t space_config;
-    shmemx_space_t space1, space2;
+    shmemx_space_t spaces[NSPACES];
 
     space_config.sheap_size = 1 << 20;
     space_config.num_contexts = 0;
@@ -25,23 +27,22 @@ int main(int argc, char *argv[])
     space_config.memkind = SHMEMX_SPACE_CUDA;
 #endif
 
-    shmemx_space_create(space_config, &space1);
-    shmemx_space_create(space_config, &space2);
+    for (i = 0; i < NSPACES; i++) {
+        shmemx_space_create(space_config, &spaces[i]);
+        shmemx_space_attach(spaces[i]);
+    }
 
-    shmemx_space_attach(space1);
-    shmemx_space_attach(space2);
-
-    int *sbuf = shmemx_space_malloc(space1, 8192);
-    int *rbuf = shmemx_space_malloc(space1, 8192);
+    int *sbuf = shmemx_space_malloc(spaces[0], 8192);
+    int *rbuf = shmemx_space_malloc(spaces[1], 8192);
 
     shmem_free(sbuf);
     shmem_free(rbuf);
 
-    shmemx_space_detach(space2);
-    shmemx_space_detach(space1);
+    for (i = 0; i < NSPACES; i++) {
+        shmemx_space_detach(spaces[i]);
+        shmemx_space_destroy(spaces[i]);
+    }
 
-    shmemx_space_destroy(space1);
-    shmemx_space_destroy(space2);
     shmem_finalize();
 
     if (mype == 0) {
