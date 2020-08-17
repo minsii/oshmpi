@@ -110,7 +110,7 @@ void OSHMPI_space_create(shmemx_space_config_t space_config, OSHMPI_space_t ** s
     OSHMPI_sobj_set_handle(&space->sobj_attr, OSHMPI_SOBJ_SPACE_HEAP, 0, 0);
 
     OSHMPI_THREAD_ENTER_CS(&OSHMPI_global.space_list.cs);
-    LL_PREPEND(OSHMPI_global.space_list.head, space);
+    LL_APPEND(OSHMPI_global.space_list.head, space);
     OSHMPI_global.space_list.nspaces++;
     OSHMPI_THREAD_EXIT_CS(&OSHMPI_global.space_list.cs);
 
@@ -133,6 +133,7 @@ void OSHMPI_space_destroy(OSHMPI_space_t * space)
 {
     OSHMPI_THREAD_ENTER_CS(&OSHMPI_global.space_list.cs);
     LL_DELETE(OSHMPI_global.space_list.head, space);
+    OSHMPI_global.space_list.nspaces--;
     OSHMPI_THREAD_EXIT_CS(&OSHMPI_global.space_list.cs);
 
     OSHMPIU_mempool_destroy(&space->mem_pool);
@@ -149,8 +150,6 @@ void OSHMPI_space_destroy(OSHMPI_space_t * space)
     }
 
     OSHMPIU_free(space);
-
-    OSHMPI_global.space_list.nspaces--;
 }
 
 /* Locally create a context associated with the space.
