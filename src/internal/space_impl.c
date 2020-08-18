@@ -45,7 +45,7 @@ static const char *space_memkind_str(shmemx_space_memkind_t memkind)
 static void *space_cuda_malloc(MPI_Aint size)
 {
     void *base = NULL;
-    OSHMPI_CALLCUDA(cudaMalloc(&base, space->sobj_attr.size));
+    OSHMPI_CALLCUDA(cudaMalloc(&base, size));
     return base;
 }
 
