@@ -36,8 +36,10 @@ void OSHMPI_free(void *ptr)
         OSHMPI_space_t *space, *tmp;
         OSHMPI_THREAD_ENTER_CS(&OSHMPI_global.space_list.cs);
         LL_FOREACH_SAFE(OSHMPI_global.space_list.head, space, tmp) {
-            if (OSHMPI_sobj_check_range(ptr, space->sobj_attr))
+            if (OSHMPI_sobj_check_range(ptr, space->sobj_attr)) {
                 OSHMPI_space_free(space, ptr);
+                break;
+            }
         }
         OSHMPI_THREAD_EXIT_CS(&OSHMPI_global.space_list.cs);
     }
