@@ -42,9 +42,9 @@ void OSHMPI_set_mpi_info_args(MPI_Info info)
     unsigned int nops;
 
     const char *amo_std_types =
-        "int:1,long:1,longlong:1,uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
+        "int:1,long:1,longlongint:1,uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
     const char *amo_ext_types =
-        "float:1,double:1,int:1,long:1,longlong:1,uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
+        "float:1,double:1,int:1,long:1,longlongint:1,uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
     const char *amo_bitws_types = "uint:1,ulong:1,ulonglong:1,int32:1,int64:1,uint32:1,uint64:1";
 
     OSHMPI_ASSERT(MPI_MAX_INFO_VAL >= strlen("cswap,sum,band,bor,bxor,no_op,replace") + 1);
@@ -96,9 +96,10 @@ void OSHMPI_set_mpi_info_args(MPI_Info info)
     } else      /* MPI default */
         OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_ops", "same_op_no_op"));
 
-    OSHMPI_CALLMPI(MPI_Info_set(info, "which_rma_ops", "put,get"));
-    OSHMPI_CALLMPI(MPI_Info_set(info, "rma_op_types:put", "contig:unlimited,vector:unlimited"));
-    OSHMPI_CALLMPI(MPI_Info_set(info, "rma_op_types:get", "contig:unlimited,vector:unlimited"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "disable_shm_accumulate", "true"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "no_op_cross_attached_mem", "true"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "accumulate_noncontig_dtype", "false"));
+    OSHMPI_CALLMPI(MPI_Info_set(info, "rma_issue_mode", "native"));
 }
 
 #ifdef OSHMPI_ENABLE_DYNAMIC_WIN
