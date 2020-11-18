@@ -37,6 +37,7 @@ check_submodule_presence() {
 ##########################################
 ## Autotools Version Check
 ##########################################
+echo  "testing..."
 
 echo_n "Checking for autoconf version..."
 recreate_tmp
